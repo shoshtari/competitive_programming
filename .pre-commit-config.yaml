@@ -30,4 +30,5 @@ repos:
         name: Sync Questions DB
         entry: python scripts/update_db.py
         language: system
+        verbose: true
         pass_filenames: true
