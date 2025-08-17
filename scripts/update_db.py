@@ -38,6 +38,7 @@ def get_codeforces_stats(qid):
                 "name": problem.name,
                 "rating": problem.rating,
                 "url": f"https://codeforces.com/problemset/problem/{problem.contestId}/{problem.index}",
+                "tags": problem.tags,
             }
     return codforces_problems.get(qid, {"name": None, "rating": None, "url": None})
 
@@ -78,33 +79,20 @@ def handle_file(file: Path, cur: sqlite3.Cursor):
     # insert or ignore into solutions
     cur.execute(
         """
-            INSERT INTO solutions(question_id, language)
-            SELECT ?, ?
-            WHERE NOT EXISTS (
-                SELECT 1 FROM solutions WHERE question_id = ? AND language = ?
-            )
+            INSERT OR IGNORE INTO solutions(question_id, language)
+            VALUES(?, ?)
         """,
-        (question_id, lang, question_id, lang),
+        (question_id, lang),
     )
-
-
-def main():
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-
-    cur.execute("CREATE INDEX IF NOT EXISTS rating_index ON questions(rating)")
-
-    # scan directory
-    for file in track(
-        list(Path(CODE_DIR).iterdir()),
-        description="Syncing Codeforces problems...",
-    ):
-        if not file.is_file():
-            continue
-        handle_file(file, cur)
-    conn.commit()
-    conn.close()
-    print("✅ Sync complete.")
+    for tag in stats["tags"]:
+        # insert or ignore into questions_tags
+        cur.execute(
+            """
+                INSERT OR IGNORE INTO questions_tags(question_id, tag)
+                VALUES(?, ?)
+            """,
+            (question_id, tag),
+        )
 
 
 def main(files):
@@ -129,15 +117,32 @@ def main(files):
     CREATE TABLE IF NOT EXISTS solutions(
         question_id INT,
         language TEXT,
-        FOREIGN KEY(question_id) REFERENCES questions(id)
+        FOREIGN KEY(question_id) REFERENCES questions(id),
+        PRIMARY KEY(question_id, language)
     )""",
     )
 
+    cur.execute(
+        """
+    CREATE TABLE IF NOT EXISTS questions_tags(
+        question_id INT,
+        tag TEXT,
+        FOREIGN KEY(question_id) REFERENCES questions(id),
+        PRIMARY KEY(question_id, tag)
+    )""",
+    )
+
+    cur.execute("CREATE INDEX IF NOT EXISTS rating_index ON questions(rating)")
+    cur.execute("CREATE INDEX IF NOT EXISTS tag_index ON questions_tags(tag)")
+
     for f in track(files, description="Syncing Codeforces problems..."):
+        if isinstance(f, str) and not f.startswith("codeforces/"):
+            continue
         handle_file(Path(f), cur)
 
     conn.commit()
     conn.close()
+    print("Database updated successfully.")
 
 
 if __name__ == "__main__":
