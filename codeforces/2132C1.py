@@ -1,11 +1,13 @@
 from typing import List
 
+
 def base3(n) -> List[int]:
     res = []
     while n:
         res.append(n % 3)
         n //= 3
     return res
+
 
 def solve():
     n = int(input())

@@ -1,11 +1,13 @@
 from typing import List
 
+
 def base3(n) -> List[int]:
     res = []
     while n:
         res.append(n % 3)
         n //= 3
     return res
+
 
 def solve():
     n, k = map(int, input().split())
@@ -25,7 +27,6 @@ def solve():
             o[ind] -= 1
             k -= 3
             o[ind - 1] += 3
-
 
     ans = 0
     for i in range(len(o)):
