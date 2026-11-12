@@ -29,7 +29,7 @@ SHORT = {
 
 
 def connect():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute(
         """
     CREATE TABLE IF NOT EXISTS attempts(
@@ -66,7 +66,7 @@ def question_id(cur, pid, name=None, rating=None, url=None, tags=()):
     qid = cur.execute(
         "SELECT id FROM questions WHERE provider='codeforces' AND id_in_provider=?",
         (pid,),
-    ).fetchone()[0]
+    ).fetchall()[0][0]
     for t in tags:
         cur.execute("INSERT OR IGNORE INTO questions_tags VALUES(?, ?)", (qid, t))
     return qid
@@ -122,7 +122,7 @@ def sync(handle):
             solved_at = conn.execute(
                 "SELECT datetime(?, 'unixepoch', 'localtime')",
                 (ac["creationTimeSeconds"],),
-            ).fetchone()[0]
+            ).fetchall()[0][0]
 
         cur.execute("INSERT OR IGNORE INTO attempts(question_id) VALUES(?)", (qid,))
         cur.execute(
@@ -153,6 +153,7 @@ def sync(handle):
             ),
         )
     conn.commit()
+    conn.close()
     print(f"synced {len(by_problem)} problems from {len(data['result'])} submissions")
 
 
@@ -231,10 +232,11 @@ def ask(files):
     for pid in pids:
         qid = question_id(cur, pid)
         cur.execute("INSERT OR IGNORE INTO attempts(question_id) VALUES(?)", (qid,))
+        conn.commit()  # never hold a write lock while waiting for the user
         mode, result, time, reason, verdicts, desc = cur.execute(
             "SELECT mode, result, time_taken_min, failure_reason, verdicts, description FROM attempts WHERE question_id=?",
             (qid,),
-        ).fetchone()
+        ).fetchall()[0]
         tty_out.write(
             f"\n{pid}" + (f"  (CF verdicts: {verdicts})" if verdicts else "") + "\n",
         )

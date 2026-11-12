@@ -10,13 +10,14 @@
 
 using namespace std;
 
+typedef long long ll;
 void solve() {
-  int n;
+  ll n;
   cin >> n;
-  int a[n];
-	map<int, int> groups;
-  for (int i = 0; i < n; i++) {
-		int tmp;
+  ll a[n];
+	map<ll, ll> groups;
+  for (ll i = 0; i < n; i++) {
+		ll tmp;
 		cin >> tmp;
 		tmp -= i;
 		if (groups.find(tmp) == groups.end()){
@@ -24,9 +25,9 @@ void solve() {
 		}
 		groups[tmp]++;
   }
-	int ans = 0;
+	ll ans = 0;
 	for(auto u: groups){
-		int count = u.second;
+		ll count = u.second;
 		if (count < 2){
 			continue;
 		}
@@ -38,9 +39,9 @@ void solve() {
 }
 
 int main() {
-  int t;
+  ll t;
   cin >> t;
-  for (int i = 0; i < t; i++) {
+  for (ll i = 0; i < t; i++) {
     solve();
   }
 }

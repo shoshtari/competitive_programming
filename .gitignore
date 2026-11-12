@@ -1,3 +1,6 @@
 incomplete*
 data.db
 a.out
+a.out.dSYM/
+data.db-journal
+__pycache__/

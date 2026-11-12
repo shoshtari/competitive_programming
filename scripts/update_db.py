@@ -74,7 +74,7 @@ def handle_file(file: Path, cur: sqlite3.Cursor):
         "SELECT id FROM questions WHERE provider = ? AND id_in_provider = ?",
         (provider, qid),
     )
-    question_id = cur.fetchone()[0]
+    question_id = cur.fetchall()[0][0]
 
     # insert or ignore into solutions
     cur.execute(
@@ -96,7 +96,7 @@ def handle_file(file: Path, cur: sqlite3.Cursor):
 
 
 def main(files):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     cur = conn.cursor()
 
     cur.execute(
