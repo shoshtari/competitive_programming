@@ -243,7 +243,7 @@ def ask(files):
         mode = prompt(
             "mode",
             mode or "practice",
-            choices=["CONTEST", "VIRTUAL", "PRACTICE"],
+            choices=["CONTEST", "VIRTUAL", "PRACTICE", "UPSOLVE"],
         )
         result = prompt("result", result or "AC", choices=["AC", "FAILED", "UPSOLVED"])
         time = prompt("time taken (min)", time, cast=int)
@@ -296,7 +296,12 @@ def show(conn, where="1", limit=50):
         return "red"
 
     result_style = {"AC": "bold green", "UPSOLVED": "bold yellow", "FAILED": "bold red"}
-    mode_style = {"contest": "magenta", "virtual": "cyan", "practice": "dim"}
+    mode_style = {
+        "contest": "magenta",
+        "virtual": "cyan",
+        "practice": "dim",
+        "upsolve": "yellow",
+    }
 
     table = Table(
         box=box.ROUNDED,
@@ -350,7 +355,7 @@ def main():
     e.add_argument("--result", choices=["AC", "FAILED", "UPSOLVED"])
     e.add_argument("--reason", help="reason for failure")
     e.add_argument("--description", help="free notes: idea, approach, takeaways")
-    e.add_argument("--mode", choices=["contest", "virtual", "practice"])
+    e.add_argument("--mode", choices=["contest", "virtual", "practice", "upsolve"])
     a = sub.add_parser("ask", help="interactively fill info for given problems/files")
     a.add_argument(
         "files",
