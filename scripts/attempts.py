@@ -3,7 +3,7 @@
 
 Usage:
   scripts/attempts.py sync [--handle mortezamalekey]   # pull from Codeforces API
-  scripts/attempts.py list [--failed]                  # print the table
+  scripts/attempts.py list [-n 50] [--failed]          # latest N, newest at bottom
   scripts/attempts.py set 2131D --time 35 --result AC --reason "off by one"
 
 `sync` only fills empty fields, so values you set by hand are never overwritten.
@@ -48,6 +48,8 @@ def connect():
     cols = [r[1] for r in conn.execute("PRAGMA table_info(attempts)")]
     if "description" not in cols:
         conn.execute("ALTER TABLE attempts ADD COLUMN description TEXT")
+    if "last_attempt_at" not in cols:
+        conn.execute("ALTER TABLE attempts ADD COLUMN last_attempt_at TEXT")
     return conn
 
 
@@ -123,6 +125,13 @@ def sync(handle):
             ).fetchone()[0]
 
         cur.execute("INSERT OR IGNORE INTO attempts(question_id) VALUES(?)", (qid,))
+        cur.execute(
+            """UPDATE attempts SET last_attempt_at = MAX(
+                 COALESCE(last_attempt_at, ''),
+                 datetime(?, 'unixepoch', 'localtime'))
+               WHERE question_id = ?""",
+            (subs[-1]["creationTimeSeconds"], qid),
+        )
         # auto fields refresh; manual-ish fields only fill if empty
         cur.execute(
             """UPDATE attempts SET
@@ -240,32 +249,85 @@ def ask(files):
             reason = prompt("reason for failure", reason)
         desc = prompt("description", desc)
         cur.execute(
-            "UPDATE attempts SET mode=?, result=?, time_taken_min=?, failure_reason=?, description=? WHERE question_id=?",
+            "UPDATE attempts SET mode=?, result=?, time_taken_min=?, failure_reason=?, description=?, "
+            "last_attempt_at=COALESCE(last_attempt_at, datetime('now', 'localtime')) "
+            "WHERE question_id=?",
             (mode.lower() if mode else None, result, time, reason, desc, qid),
         )
         conn.commit()
 
 
-def show(conn, where="1"):
+def show(conn, where="1", limit=50):
     rows = conn.execute(
-        f"""SELECT q.id_in_provider, q.rating, a.mode, a.result, a.time_taken_min,
-                   a.verdicts, a.failure_reason, a.description
+        f"""SELECT q.id_in_provider, q.name, q.rating, a.mode, a.result,
+                   a.time_taken_min, a.verdicts, a.failure_reason, a.description,
+                   COALESCE(a.last_attempt_at, a.solved_at) AS at
             FROM attempts a JOIN questions q ON q.id = a.question_id
-            WHERE {where} ORDER BY a.solved_at IS NULL, a.solved_at DESC""",
-    ).fetchall()
-    head = (
-        "problem",
-        "rating",
-        "mode",
-        "result",
-        "min",
-        "verdicts",
-        "reason",
-        "description",
+            WHERE {where}
+            ORDER BY at IS NULL, at DESC
+            {"LIMIT ?" if limit else ""}""",
+        (limit,) if limit else (),
+    ).fetchall()[::-1]
+
+    try:
+        from rich import box
+        from rich.console import Console
+        from rich.table import Table
+    except ImportError:
+        for r in rows:
+            print("\t".join("" if v is None else str(v) for v in r))
+        return
+
+    def rating_style(r):
+        if r is None:
+            return "dim"
+        for lim, color in [
+            (1200, "grey70"),
+            (1400, "green"),
+            (1600, "cyan"),
+            (1900, "blue"),
+            (2100, "magenta"),
+            (2400, "yellow"),
+        ]:
+            if r < lim:
+                return color
+        return "red"
+
+    result_style = {"AC": "bold green", "UPSOLVED": "bold yellow", "FAILED": "bold red"}
+    mode_style = {"contest": "magenta", "virtual": "cyan", "practice": "dim"}
+
+    table = Table(
+        box=box.ROUNDED,
+        header_style="bold",
+        row_styles=["", "on grey11"],
+        title=f"Last {len(rows)} attempts",
+        caption="newest at bottom",
     )
-    print("\t".join(head))
-    for r in rows:
-        print("\t".join("" if v is None else str(v) for v in r))
+    table.add_column("problem", style="bold", no_wrap=True)
+    table.add_column("name", max_width=26, overflow="ellipsis", no_wrap=True)
+    table.add_column("rating", justify="right")
+    table.add_column("mode")
+    table.add_column("result")
+    table.add_column("min", justify="right")
+    table.add_column("verdicts", style="red")
+    table.add_column("reason", max_width=30)
+    table.add_column("description", max_width=40)
+    table.add_column("date", style="dim", no_wrap=True)
+
+    for pid, name, rating, mode, result, mins, verdicts, reason, desc, at in rows:
+        table.add_row(
+            pid,
+            name or "",
+            f"[{rating_style(rating)}]{rating or '-'}[/]",
+            f"[{mode_style.get(mode, '')}]{mode or ''}[/]",
+            f"[{result_style.get(result, '')}]{result or ''}[/]",
+            "" if mins is None else str(mins),
+            verdicts or "",
+            reason or "",
+            desc or "",
+            (at or "")[:10],
+        )
+    Console().print(table)
 
 
 def main():
@@ -279,6 +341,7 @@ def main():
         action="store_true",
         help="only problems with failed submissions",
     )
+    l.add_argument("-n", type=int, default=50, help="how many latest rows (0 = all)")
     e = sub.add_parser("set")
     e.add_argument("problem", help="e.g. 2131D")
     e.add_argument("--time", type=int, help="minutes taken")
@@ -335,6 +398,7 @@ def main():
         show(
             connect(),
             "a.wrong_submissions > 0 OR a.result != 'AC'" if args.failed else "1",
+            limit=args.n,
         )
 
 
